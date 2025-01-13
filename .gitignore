@@ -5,6 +5,11 @@ file_structure.txt
 gui.py
 install.py
 SMWinservice.py
+erpnext_sync_win.py
+test_erpnext_api.py
+test_erpnext_biometric.py
+test_erpnext_api_prompt.py
+test_erpnext_api_open.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
