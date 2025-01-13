@@ -11,6 +11,19 @@ from logging.handlers import RotatingFileHandler
 import pickledb
 from zk import ZK, const
 
+# Manot's modified import
+# /api/method/erpnext.hr.doctype.employee_checkin.employee_checkin.add_log_based_on_employee_field
+
+
+# import thai_strftime
+# import apprise
+# from dotenv import load_dotenv
+# from multiprocessing import Process
+# from signal import signal
+# from signal import SIGTERM
+
+# load_dotenv()
+
 EMPLOYEE_NOT_FOUND_ERROR_MESSAGE = "No Employee found for the given employee field value"
 EMPLOYEE_INACTIVE_ERROR_MESSAGE = "Transactions cannot be created for an Inactive Employee"
 DUPLICATE_EMPLOYEE_CHECKIN_ERROR_MESSAGE = "This employee already has a log with the same timestamp"
@@ -24,7 +37,7 @@ if hasattr(config,'allowed_exceptions'):
 
 device_punch_values_IN = getattr(config, 'device_punch_values_IN', [0,4])
 device_punch_values_OUT = getattr(config, 'device_punch_values_OUT', [1,5])
-ERPNEXT_VERSION = getattr(config, 'ERPNEXT_VERSION', 14)
+ERPNEXT_VERSION = getattr(config, 'ERPNEXT_VERSION', 15)
 
 # possible area of further developemt
     # Real-time events - setup getting events pushed from the machine rather then polling.
@@ -51,7 +64,16 @@ def main():
             for device in config.devices:
                 device_attendance_logs = None
                 info_logger.info("Processing Device: "+ device['device_id'])
+
+                print("Device ID", device['device_id'])
+                print("Device IP", device['ip'])
+                print("Device Punch Direction", device['punch_direction'])
+                print("Device Clear From Device On Fetch", device['clear_from_device_on_fetch'])
+
                 dump_file = get_dump_file_name_and_directory(device['device_id'], device['ip'])
+
+                print("Dump File", dump_file)
+                
                 if os.path.exists(dump_file):
                     info_logger.error('Device Attendance Dump Found in Log Directory. This can mean the program crashed unexpectedly. Retrying with dumped data.')
                     with open(dump_file, 'r') as f:
@@ -179,19 +201,37 @@ def send_to_erpnext(employee_field_value, timestamp, device_id=None, log_type=No
     Example: send_to_erpnext('12349',datetime.datetime.now(),'HO1','IN')
     """
     endpoint_app = "hrms" if ERPNEXT_VERSION > 13 else "erpnext"
+
+    print("ERP Version", ERPNEXT_VERSION)
+    print("Endpoint App", endpoint_app)
+    print("Config URL", config.ERPNEXT_URL)
+
     url = f"{config.ERPNEXT_URL}/api/method/{endpoint_app}.hr.doctype.employee_checkin.employee_checkin.add_log_based_on_employee_field"
+
+    print("send_to_url", url)
+
     headers = {
         'Authorization': "token "+ config.ERPNEXT_API_KEY + ":" + config.ERPNEXT_API_SECRET,
         'Accept': 'application/json'
     }
+
+    print("send_to_erpnext_headers", headers)
+
     data = {
         'employee_field_value' : employee_field_value,
         'timestamp' : timestamp.__str__(),
         'device_id' : device_id,
         'log_type' : log_type
     }
+
+    print("Employee ID Type", type(data))
+    print("Employee ID", data["employee_field_value"])
+
+    emp_id = data["employee_field_value"]
+
     response = requests.request("POST", url, headers=headers, json=data)
     if response.status_code == 200:
+        print("Employee ID", emp_id)
         return 200, json.loads(response._content)['message']['name']
     else:
         error_str = _safe_get_error_str(response)
@@ -239,11 +279,22 @@ def send_shift_sync_to_erpnext(shift_type_name, sync_timestamp):
         'Authorization': "token "+ config.ERPNEXT_API_KEY + ":" + config.ERPNEXT_API_SECRET,
         'Accept': 'application/json'
     }
+
+    print("Shift Type Name", shift_type_name)
+    print("Send Shift URL", url)
+    print("Send Shift Sync To ERPNext Headers", headers)
+
     data = {
         "last_sync_of_checkin" : str(sync_timestamp)
     }
+
+    print("Send Shift Sync To ERPNext Data", data)
+
     try:
         response = requests.request("PUT", url, headers=headers, data=json.dumps(data))
+        
+        print("PUT Response", response.status_code)
+
         if response.status_code == 200:
             info_logger.info("\t".join(['Shift Type last_sync_of_checkin Updated', str(shift_type_name), str(sync_timestamp.timestamp())]))
         else:
@@ -327,6 +378,7 @@ def infinite_loop(sleep_time=15):
             time.sleep(sleep_time)
         except BaseException as e:
             print(e)
+            print("infinite_loop function", "infinite_loop")
 
 if __name__ == "__main__":
     infinite_loop()
