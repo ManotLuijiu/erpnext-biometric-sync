@@ -7,12 +7,13 @@ readme = "README.md"
 packages = [{include = "erpnext_biometric_tests"}]
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = ">=3.8.1,<4.0"
 requests = "^2.31.0"
 loguru = "^0.7.2"
 pickledb = "^0.9.2"
 pyzk = "^0.9"
 PyQt5 = "^5.15.9"
+pywhatkit = "^5.4"
 
 [build-system]
 requires = ["poetry-core"]

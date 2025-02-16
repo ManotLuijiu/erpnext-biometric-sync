@@ -2,8 +2,8 @@
 # ERPNext related configs
 ERPNEXT_API_KEY = ''
 ERPNEXT_API_SECRET = ''
-ERPNEXT_URL = 'http://dev.local:8000'
-ERPNEXT_VERSION = 13
+ERPNEXT_URL = 'https://yourdomain.com'
+ERPNEXT_VERSION = 15
 
 
 # operational configs
@@ -18,14 +18,13 @@ IMPORT_START_DATE = None # format: '20190501'
     #- clear_from_device_on_fetch: if set to true then attendance is deleted after fetch is successful.
                                     #(Caution: this feature can lead to data loss if used carelessly.)
 devices = [
-    {'device_id':'test_1','ip':'192.168.0.209', 'punch_direction': None, 'clear_from_device_on_fetch': False},
-    {'device_id':'test_2','ip':'192.168.2.209', 'punch_direction': None, 'clear_from_device_on_fetch': False}
+   {'device_id':'YourCompany_K50ID','ip':'192.168.0.201', 'punch_direction': 'AUTO', 'clear_from_device_on_fetch': False},
 ]
 
 # Configs updating sync timestamp in the Shift Type DocType 
 # please, read this thread to know why this is necessary https://discuss.erpnext.com/t/v-12-hr-auto-attendance-purpose-of-last-sync-of-checkin-in-shift-type/52997
 shift_type_device_mapping = [
-    {'shift_type_name': ['Shift1'], 'related_device_id': ['test_1','test_2']}
+    {'shift_type_name': ['Shift1', 'Shift2', 'Shift3'], 'related_device_id': ['YourCompany_K50ID']}
 ]
 
 
