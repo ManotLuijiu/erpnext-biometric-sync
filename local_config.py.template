@@ -5,6 +5,9 @@ ERPNEXT_API_SECRET = ''
 ERPNEXT_URL = 'https://yourdomain.com'
 ERPNEXT_VERSION = 15
 
+# Add WhatsApp configuration to local_config.py
+WHATSAPP_GROUP_ID = "your_group_id"
+WHATSAPP_WAIT_TIME = 15  # seconds to wait for WhatsApp Web to load
 
 # operational configs
 PULL_FREQUENCY = 60 # in minutes
