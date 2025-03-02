@@ -1,4 +1,4 @@
 requests
-pickledb = "^0.9.2"
+pickledb=="^0.9.2"
 pyzk
 PyQt5
