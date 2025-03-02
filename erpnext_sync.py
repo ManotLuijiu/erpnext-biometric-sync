@@ -12,7 +12,7 @@ from zk import ZK, const
 
 # Manot's modified import
 # /api/method/erpnext.hr.doctype.employee_checkin.employee_checkin.add_log_based_on_employee_field
-import pywhatkit
+# import pywhatkit
 
 import thai_strftime
 # import apprise

@@ -11,7 +11,7 @@ test_erpnext_api.py
 test_erpnext_biometric.py
 test_erpnext_api_prompt.py
 test_erpnext_api_open.py
-requirements.txt
+# requirements.txt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
