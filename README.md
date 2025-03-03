@@ -1,4 +1,4 @@
-# Biometric Attendance Sync Tool / เครื่องมือซิงค์ข้อมูลการเข้างานด้วยไบโอเมตริก (For ERPNext / สำหรับ ERPNext)
+# Biometric Attendance Sync Tool For ERPNext / เครื่องมือซิงค์ข้อมูลการเข้างานด้วยไบโอเมตริก สำหรับ ERPNext
 
 [🇬🇧 English](#english-version) | [🇹🇭 ภาษาไทย](#thai-version--ภาษาไทย)
 
@@ -21,6 +21,7 @@ Python Scripts for retrieving data from the Biometric Attendance System _(BAS)_ 
 ### Pre-requisites
 
 - Python 3.6+
+- ZKTeco K50-ID (Or another model)
 
 ### Usage
 
@@ -31,7 +32,7 @@ The `erpnext_sync.py` script is the core of this project. More details can be fo
 1. Install dependencies:
 
    ```bash
-   cd biometric-attendance-sync-tool
+   cd erpnext-biometric-sync
      && python3 -m venv venv
      && source venv/bin/activate
      && pip install -r requirements.txt
@@ -48,8 +49,14 @@ More information available at [Wiki](https://github.com/frappe/biometric-attenda
 ### Setting Up Config
 
 - Copy `local_config.py.template` and rename it to `local_config.py`
+
+```bash
+sudo cp local_config.py.template local_config.py
+```
+
 - Fill in the relevant details as described in the file
 - Key configurations:
+
   - **ERPNext Connection:**
     - `ERPNEXT_API_KEY`: ERPNext user API Key
     - `ERPNEXT_API_SECRET`: ERPNext user API Secret
@@ -59,6 +66,11 @@ More information available at [Wiki](https://github.com/frappe/biometric-attenda
     - `PULL_FREQUENCY`: Frequency to pull data from the biometric device (in minutes)
     - `LOGS_DIRECTORY`: Directory for storing logs
     - `IMPORT_START_DATE`: Start date for importing data (`YYYYMMDD` format). Set `None` to import all available data.
+  - **Copy local_config.py to test folder:**
+
+    ```bash
+    sudo cp local_config.py erpnext_biometric_tests/local_config.py
+    ```
 
 #### Important Note on Start Date
 
@@ -94,6 +106,7 @@ Python Scripts สำหรับดึงข้อมูลจากระบ�
 ### ข้อกำหนดเบื้องต้น
 
 - Python 3.6+
+- ZKTeco K50-ID (หรือโมเดลอื่นก็ได้)
 
 ### วิธีใช้งาน
 
@@ -104,7 +117,7 @@ Python Scripts สำหรับดึงข้อมูลจากระบ�
 1. ติดตั้ง Dependencies:
 
    ```bash
-   cd biometric-attendance-sync-tool
+   cd erpnext-biometric-sync
      && python3 -m venv venv
      && source venv/bin/activate
      && pip install -r requirements.txt
@@ -121,8 +134,14 @@ Python Scripts สำหรับดึงข้อมูลจากระบ�
 ### การตั้งค่าคอนฟิก
 
 - คัดลอกไฟล์ `local_config.py.template` และเปลี่ยนชื่อเป็น `local_config.py`
+
+```bash
+sudo cp local_config.py.template local_config.py
+```
+
 - กรอกข้อมูลที่เกี่ยวข้องตามคำอธิบายในไฟล์
 - คีย์ที่สำคัญใน `local_config.py` มีดังนี้:
+
   - **การเชื่อมต่อกับ ERPNext:**
     - `ERPNEXT_API_KEY`: API Key ของผู้ใช้ ERPNext
     - `ERPNEXT_API_SECRET`: API Secret ของผู้ใช้ ERPNext
@@ -132,6 +151,11 @@ Python Scripts สำหรับดึงข้อมูลจากระบ�
     - `PULL_FREQUENCY`: ความถี่ในการดึงข้อมูลจากเครื่องสแกนไบโอเมตริก (หน่วย: นาที)
     - `LOGS_DIRECTORY`: ไดเรกทอรีสำหรับจัดเก็บล็อก
     - `IMPORT_START_DATE`: วันที่เริ่มนำเข้าข้อมูล (รูปแบบ: `YYYYMMDD`)
+  - **Copy local_config.py to test folder:**
+
+    ```bash
+    sudo cp local_config.py erpnext_biometric_tests/local_config.py
+    ```
 
 #### หมายเหตุสำคัญเกี่ยวกับวันที่เริ่มต้น
 
