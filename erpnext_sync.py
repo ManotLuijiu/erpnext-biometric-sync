@@ -15,6 +15,7 @@ from zk import ZK, const
 # import pywhatkit
 
 import thai_strftime
+
 # import apprise
 # from dotenv import load_dotenv
 # from multiprocessing import Process
@@ -96,6 +97,21 @@ def main():
 
     """
     try:
+        # Get the dynamic pull frequency based on current time
+        current_pull_frequency = get_dynamic_pull_frequency()
+
+        # Run database cleanup once a day (roughly)
+        last_cleanup_timestamp = _safe_convert_date(
+            status.get("last_cleanup_timestamp"), "%Y-%m-%d %H:%M:%S.%f"
+        )
+        if (
+            not last_cleanup_timestamp
+            or last_cleanup_timestamp
+            < datetime.datetime.now() - datetime.timedelta(days=1)
+        ):
+            cleanup_processed_attendance_db()
+            status.set("last_cleanup_timestamp", str(datetime.datetime.now()))
+
         last_lift_off_timestamp = _safe_convert_date(
             status.get("lift_off_timestamp"), "%Y-%m-%d %H:%M:%S.%f"
         )
@@ -103,10 +119,12 @@ def main():
             last_lift_off_timestamp
             and last_lift_off_timestamp
             < datetime.datetime.now()
-            - datetime.timedelta(minutes=config.PULL_FREQUENCY)
+            - datetime.timedelta(minutes=current_pull_frequency)
         ) or not last_lift_off_timestamp:
             status.set("lift_off_timestamp", str(datetime.datetime.now()))
-            info_logger.info("Cleared for lift off!")
+            info_logger.info(
+                f"Cleared for lift off! Using pull frequency: {current_pull_frequency} minutes"
+            )
             for device in config.devices:
                 device_attendance_logs = None
                 info_logger.info("Processing Device: " + device["device_id"])
@@ -152,6 +170,194 @@ def main():
         error_logger.exception("exception has occurred in the main function...")
 
 
+# Add this function to erpnext_sync.py
+
+
+def get_last_import_date(device_id):
+    """
+    Gets the most recent import date for a specific device.
+    Uses the status database to track the last successful import date per device.
+    This avoids having to reprocess records from IMPORT_START_DATE on every restart.
+
+    Args:
+        device_id: The device identifier
+
+    Returns:
+        datetime.datetime: The last import date for the device, or the configured
+                           IMPORT_START_DATE if no previous import has occurred
+    """
+    # Check if we have a last import date for this device
+    last_import_key = f"{device_id}_last_import_date"
+    last_import_date = status.get(last_import_key)
+
+    if last_import_date:
+        # We have a stored date, convert it to datetime
+        return _safe_convert_date(last_import_date, "%Y-%m-%d %H:%M:%S.%f")
+    else:
+        # No stored date, use the configured IMPORT_START_DATE
+        return _safe_convert_date(config.IMPORT_START_DATE, "%Y%m%d")
+
+
+def update_last_import_date(device_id, import_date):
+    """
+    Updates the last import date for a specific device.
+
+    Args:
+        device_id: The device identifier
+        import_date: The datetime to store
+
+    Returns:
+        None
+    """
+    last_import_key = f"{device_id}_last_import_date"
+    status.set(last_import_key, str(import_date))
+
+
+def cleanup_processed_attendance_db(days_to_keep=90):
+    """
+    Cleans up the processed attendance database by removing entries older than the specified number of days.
+    This prevents the database from growing too large over time.
+
+    Args:
+        days_to_keep: Number of days of records to keep
+
+    Returns:
+        int: Number of records removed
+    """
+    processed_db = pickledb.load(
+        "/".join([config.LOGS_DIRECTORY, "processed_attendance.json"]), True
+    )
+    all_keys = processed_db.getall()
+    cutoff_date = datetime.datetime.now() - datetime.timedelta(days=days_to_keep)
+
+    records_removed = 0
+
+    for key in all_keys:
+        record = processed_db.get(key)
+        if record and "processed_at" in record:
+            try:
+                processed_at = datetime.datetime.strptime(
+                    record["processed_at"], "%Y-%m-%d %H:%M:%S.%f"
+                )
+                if processed_at < cutoff_date:
+                    processed_db.rem(key)
+                    records_removed += 1
+            except:
+                # Skip records with invalid dates
+                pass
+
+    if records_removed > 0:
+        info_logger.info(
+            f"Cleaned up {records_removed} old records from processed attendance database"
+        )
+
+    return records_removed
+
+
+# Create a unique identifier for each attendance record
+def create_attendance_key(user_id, timestamp):
+    """
+    Creates a unique key for an attendance record based on user_id and timestamp.
+
+    Args:
+        user_id: The user ID from the biometric device
+        timestamp: The datetime object of the attendance
+
+    Returns:
+        str: A unique key string
+    """
+    # Format: user_id + "_" + unix timestamp (to second precision)
+    if isinstance(timestamp, datetime.datetime):
+        timestamp_str = str(int(timestamp.timestamp()))
+    else:
+        timestamp_str = str(int(timestamp))
+
+    return f"{user_id}_{timestamp_str}"
+
+
+# Check if a record has already been processed
+def is_attendance_processed(user_id, timestamp):
+    """
+    Checks if an attendance record has already been processed and sent to ERPNext.
+
+    Args:
+        user_id: The user ID from the biometric device
+        timestamp: The datetime object of the attendance
+
+    Returns:
+        bool: True if already processed, False otherwise
+    """
+    attendance_key = create_attendance_key(user_id, timestamp)
+    processed_db = pickledb.load(
+        "/".join([config.LOGS_DIRECTORY, "processed_attendance.json"]), True
+    )
+    return processed_db.get(attendance_key) is not None
+
+
+# Mark a record as processed
+def mark_attendance_processed(user_id, timestamp, erpnext_id=None):
+    """
+    Marks an attendance record as processed after successful submission to ERPNext.
+
+    Args:
+        user_id: The user ID from the biometric device
+        timestamp: The datetime object of the attendance
+        erpnext_id: The ID assigned by ERPNext (optional)
+
+    Returns:
+        None
+    """
+    attendance_key = create_attendance_key(user_id, timestamp)
+    processed_db = pickledb.load(
+        "/".join([config.LOGS_DIRECTORY, "processed_attendance.json"]), True
+    )
+    processed_db.set(
+        attendance_key,
+        {"processed_at": str(datetime.datetime.now()), "erpnext_id": erpnext_id},
+    )
+
+
+def get_dynamic_pull_frequency():
+    """
+    Returns the appropriate pull frequency based on the current time:
+    - 3 minutes between 11:30AM-2:30PM and 11:30PM-2:30AM
+    - 60 minutes at all other times
+    Uses the timezone specified in config.
+    """
+    # Use timezone-aware datetime
+    import pytz
+
+    # Get timezone from config or use Asia/Bangkok as default (for Thailand)
+    tz_name = getattr(config, "TIMEZONE", "Asia/Bangkok")
+    timezone = pytz.timezone(tz_name)
+    print("Time Zone", timezone)
+
+    # Get current time in the correct timezone
+    # current_time = datetime.datetime.now().time()
+    current_datetime = datetime.datetime.now(pytz.UTC).astimezone(timezone)
+    current_time = current_datetime.time()
+    print("Current Date/Time", current_datetime)
+
+    # Define the time ranges for increased frequency
+    morning_start = datetime.time(11, 30)
+    morning_end = datetime.time(14, 30)
+
+    night_start = datetime.time(23, 30)
+    night_end = datetime.time(2, 30)
+
+    # Handle the night time range that crosses midnight
+    if night_start <= current_time or current_time <= night_end:
+        night_time_match = True
+    else:
+        night_time_match = False
+
+    # Check if current time is within the high-frequency periods
+    if (morning_start <= current_time <= morning_end) or night_time_match:
+        return 3  # 3 minutes during busy periods
+    else:
+        return 60  # 60 minutes during other times
+
+
 def pull_process_and_push_data(device, device_attendance_logs=None):
     """Takes a single device config as param and pulls data from that device.
 
@@ -181,18 +387,33 @@ def pull_process_and_push_data(device, device_attendance_logs=None):
         )
         if not device_attendance_logs:
             return
+
+    # Get the dynamic import date for this device
+    import_start_date = get_last_import_date(device["device_id"])
+    info_logger.info(
+        f"Using import start date: {import_start_date} for device {device['device_id']}"
+    )
+
     # for finding the last successfull push and restart from that point (or) from a set 'config.IMPORT_START_DATE' (whichever is later)
     index_of_last = -1
     last_line = get_last_line_from_file(
         "/".join([config.LOGS_DIRECTORY, attendance_success_log_file]) + ".log"
     )
-    import_start_date = _safe_convert_date(config.IMPORT_START_DATE, "%Y%m%d")
+    # import_start_date = _safe_convert_date(config.IMPORT_START_DATE, "%Y%m%d")
     if last_line or import_start_date:
         last_user_id = None
         last_timestamp = None
         if last_line:
-            last_user_id, last_timestamp = last_line.split("\t")[4:6]
-            last_timestamp = datetime.datetime.fromtimestamp(float(last_timestamp))
+            try:
+                last_user_id, last_timestamp = last_line.split("\t")[4:6]
+                last_timestamp = datetime.datetime.fromtimestamp(float(last_timestamp))
+            except:
+                # Handle case where log file format might be different
+                info_logger.warning(
+                    f"Could not parse last line from log file: {last_line}"
+                )
+                last_timestamp = None
+
         if import_start_date:
             if last_timestamp:
                 if last_timestamp < import_start_date:
@@ -213,7 +434,20 @@ def pull_process_and_push_data(device, device_attendance_logs=None):
                     index_of_last = i
                     break
 
+    # Track the most recent timestamp processed
+    most_recent_timestamp = None
+
+    # Process attendance logs
     for device_attendance_log in device_attendance_logs[index_of_last + 1 :]:
+        # Skip records that have already been processed
+        if is_attendance_processed(
+            device_attendance_log["user_id"], device_attendance_log["timestamp"]
+        ):
+            info_logger.info(
+                f"Skipping already processed record: User ID {device_attendance_log['user_id']} at {device_attendance_log['timestamp']}"
+            )
+            continue
+
         punch_direction = device["punch_direction"]
         if punch_direction == "AUTO":
             if device_attendance_log["punch"] in device_punch_values_OUT:
@@ -228,7 +462,21 @@ def pull_process_and_push_data(device, device_attendance_logs=None):
             device["device_id"],
             punch_direction,
         )
+
+        # Track the most recent timestamp
+        if (
+            most_recent_timestamp is None
+            or device_attendance_log["timestamp"] > most_recent_timestamp
+        ):
+            most_recent_timestamp = device_attendance_log["timestamp"]
+
         if erpnext_status_code == 200:
+            # Mark the record as processed with the ERPNext ID
+            mark_attendance_processed(
+                device_attendance_log["user_id"],
+                device_attendance_log["timestamp"],
+                erpnext_message,
+            )
             attendance_success_logger.info(
                 "\t".join(
                     [
@@ -243,6 +491,28 @@ def pull_process_and_push_data(device, device_attendance_logs=None):
                 )
             )
         else:
+            # Check if it's a duplicate error, and if so, mark it as processed to avoid future attempts
+            if DUPLICATE_EMPLOYEE_CHECKIN_ERROR_MESSAGE in erpnext_message:
+                # Extract the ERPNext ID from the message if possible
+                erpnext_id = None
+                try:
+                    # The error message contains something like '<a href="/app/Form/Employee Checkin/EMP-CKIN-01-2025-000258"'
+                    import re
+
+                    match = re.search(r'Employee Checkin/([^"]+)', erpnext_message)
+                    if match:
+                        erpnext_id = match.group(1)
+                except:
+                    pass
+
+                mark_attendance_processed(
+                    device_attendance_log["user_id"],
+                    device_attendance_log["timestamp"],
+                    erpnext_id,
+                )
+                info_logger.info(
+                    f"Marked duplicate record as processed: User ID {device_attendance_log['user_id']} at {device_attendance_log['timestamp']}"
+                )
             attendance_failed_logger.error(
                 "\t".join(
                     [
@@ -258,6 +528,18 @@ def pull_process_and_push_data(device, device_attendance_logs=None):
             )
             if not (any(error in erpnext_message for error in allowlisted_errors)):
                 raise Exception("API Call to ERPNext Failed.")
+
+    # Update the last import date to the most recent timestamp processed
+    if most_recent_timestamp:
+        # Set the last import date to 1 minute before the most recent timestamp
+        # This small buffer helps ensure we don't miss any records that might have
+        # the exact same timestamp in future runs
+        buffer_time = datetime.timedelta(minutes=1)
+        import_timestamp = most_recent_timestamp - buffer_time
+        update_last_import_date(device["device_id"], import_timestamp)
+        info_logger.info(
+            f"Updated last import date for {device['device_id']} to {import_timestamp}"
+        )
 
 
 def get_all_attendance_from_device(
